@@ -3,7 +3,9 @@ package master2018.flink;
 import java.util.Iterator;
 
 import org.apache.flink.api.common.functions.FilterFunction;
+import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple;
+import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.api.java.tuple.Tuple7;
 import org.apache.flink.api.java.tuple.Tuple8;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -37,11 +39,14 @@ public class AccidentReporter {
 			//return (value.f2>90);
 		}}
 	
-	
-	static class AccidentReporterWindowFunction implements WindowFunction<Tuple8<Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer>, Tuple7<Integer, Integer, Integer, Integer, Integer, Integer, Integer>, Tuple, GlobalWindow>{
+	/**
+	 * Detects the cars with an accident (understood to be stopped for at least 4 consecutive logs), 
+	 * as a user-defined WindowFunction. 
+	 */
+	static class AccidentReporterWindowFunction implements WindowFunction<Tuple8<Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer>, Tuple7<Integer, Integer, Integer, Integer, Integer, Integer, Integer>, Tuple5<Integer, Integer, Integer, Integer, Integer>, GlobalWindow>{
 
 		@Override
-		public void apply(Tuple key, GlobalWindow window,
+		public void apply(Tuple5<Integer, Integer, Integer, Integer, Integer> key, GlobalWindow window,
 				Iterable<Tuple8<Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer>> input,
 				Collector<Tuple7<Integer, Integer, Integer, Integer, Integer, Integer, Integer>> out)
 				throws Exception {
@@ -69,12 +74,27 @@ public class AccidentReporter {
 			}
 			
 		}}
+	
+	/**
+	 * Generates a Tuple5 key composed by (VID, XWay, Dir, Seg, Pos) 
+	 */
+	static class MyAccidentKeySelector implements KeySelector<Tuple8<Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer>, Tuple5<Integer, Integer, Integer, Integer, Integer>>{
+
+		@Override
+		public Tuple5<Integer, Integer, Integer, Integer, Integer> getKey(
+				Tuple8<Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer> value) throws Exception {
+			
+			return new Tuple5<Integer, Integer, Integer, Integer, Integer>(
+					value.f1, value.f3, value.f5, value.f6, value.f7);
+		}
+		
+	}
 
 	
     static SingleOutputStreamOperator<Tuple7<Integer, Integer, Integer, Integer, Integer, Integer, Integer>> detectAccident(DataStream<Tuple8<Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer>> data) {
         return data
                 .filter(new NullSpeedFilter())
-                .keyBy(1,3,5,6,7)
+                .keyBy(new MyAccidentKeySelector())
                 .countWindow(4, 1)
                 .apply(new AccidentReporterWindowFunction()); 
         }	
